@@ -1,0 +1,27 @@
+module boole16 (
+    input a[16],
+    input b[16],
+    input alufn[5],
+    output out[16]
+  ) {
+
+  always {
+    out = 0;
+    
+    case(alufn){
+      Func.AND:
+        out =   a & b; 
+      Func.NAND:
+        out = ~(a & b);
+      Func.OR:
+        out =   a | b;
+      Func.NOR:
+        out = ~(a | b);
+      Func.XOR:
+        out =   a ^ b;
+      Func.LDR:
+        out =   a;
+      
+      }
+  }
+}

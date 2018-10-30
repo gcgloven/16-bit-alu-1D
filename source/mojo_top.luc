@@ -1,0 +1,298 @@
+global Func{
+  const ADD   = 5b10000;
+  const SUB   = 5b10001;
+  const AND   = 5b10010;
+  const NAND  = 5b10011;
+  const OR    = 5b10100;
+  const NOR   = 5b10101;
+  const XOR   = 5b10110;
+  const LDR   = 5b10111;
+  const SHL   = 5b11000;
+  const SHR   = 5b11001;
+  const SRA   = 5b11010;
+  const CMPEQ = 5b11011;
+  const CMPLT = 5b11100;
+  const CMPLE = 5b11101;
+  const MUL   = 5b11111;
+  
+}
+
+
+
+module mojo_top (
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    input cclk,             // configuration clock, AVR ready when high
+    output spi_miso,        // AVR SPI MISO
+    input spi_ss,           // AVR SPI Slave Select
+    input spi_mosi,         // AVR SPI MOSI
+    input spi_sck,          // AVR SPI Clock
+    output spi_channel [4], // AVR general purpose pins (used by default to select ADC channel)
+    input avr_tx,           // AVR TX (FPGA RX)
+    output avr_rx,          // AVR RX (FPGA TX)
+    input avr_rx_busy,      // AVR RX buffer full
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4],      // Digit select on IO Shield
+    input io_button [5],    // 5 buttons on IO Shield
+    input io_dip [3][8]     // DIP switches on IO Shield
+  ) {
+  
+  sig rst;                  // reset signal
+  sig value[16];
+  sig alufn[4];
+  sig out[2][8];
+  
+  
+  dff counter[25](.clk(clk), .rst(rst));
+  
+  
+  var on;  // 8bits '1'
+  var off; // 8bits '0'
+  
+  
+  //import the modules
+  test_adder test_adder;
+  test_compare test_compare;
+  test_boole test_boole;
+  test_shifter test_shifter;
+  test_multiply test_multiply;
+  test_error test_error;
+  multi_seven_seg seg;
+  functionCombi combine;
+  
+  fsm state (.clk(clk), .rst(rst)) = {IDLE, ADDER, COMPARE, BOOLE, SHIFTER, MULTIPLY, ERROR};
+  fsm alu (.clk(clk), .rst(rst)) = {IDLE, AUTO};
+  dff a[16](.clk(clk), .rst(rst));
+  dff b[16](.clk(clk), .rst(rst));
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+  }
+  
+  always {
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    
+    led = 8h00;             // turn LEDs off
+    spi_miso = bz;          // not using SPI
+    spi_channel = bzzzz;    // not using flags
+    avr_rx = bz;            // not using serial port
+    
+    io_led = 3x{{8h00}};    // turn LEDs off
+    io_seg = 8hff;          // turn segments off
+    io_sel = 4hf;           // select no digits
+    
+    out = 2x{{8h00}};
+    
+    
+    value[7:0] = io_dip[0];
+    value[15:8] = io_dip[1];
+    io_led[1:0] = out;
+    alufn = io_dip[2][3:0];
+    //store = io_dip[2][7:6];
+    
+    
+    
+    
+    on = 8hff;
+    off = 8h00;
+    
+    test_adder.clk = clk;
+    test_adder.rst = rst;
+    test_error.clk = clk;
+    test_error.rst = rst;
+    test_compare.clk = clk;
+    test_compare.rst = rst;
+    test_boole.clk = clk;
+    test_boole.rst = rst;
+    test_shifter.clk = clk;
+    test_shifter.rst = rst;
+    test_multiply.clk = clk;
+    test_multiply.rst = rst;
+    seg.clk=clk;
+    seg.rst=rst;
+    
+    combine.a = 0;
+    combine.b = 0;
+    combine.alufn = 0;
+    
+    
+    
+    // start initiates the testing for each module
+    
+    test_adder.start = 0;
+    test_compare.start = 0;
+    test_boole.start = 0;
+    test_shifter.start = 0;
+    test_multiply.start = 0;
+    test_error.start = 0;
+    seg.values = {4d15, 4d15, 4d15, 4d15};
+    io_seg = ~seg.seg;
+    io_sel = ~seg.sel;
+    
+    //Default testing will be manual mode
+    //a and b are stored in a flip flop when io_dip[2][7] and io_dip[2][6] are switched on resprectively
+    //When both switches are switched on, the operation with correct alufn combition will begin, output will be indicated by io_led[1:0]
+    
+    io_led[2][7:6] = io_dip[2][7:6];
+    io_led[0] = io_dip[0];
+    io_led[1] = io_dip[1];
+    if (io_dip[2][7] == 1 & io_dip[2][6] == 0){
+      //combine.a = value;
+      a.d = value;
+    }
+    else if (io_dip[2][6] == 1 & io_dip[2][7] == 0){
+      //combine.b = value;
+      b.d = value;
+    }
+    else if (io_dip[2][6] ==1 & io_dip[2][7] == 1){
+      combine.a = a.q;
+      combine.b = b.q;
+      combine.alufn = io_dip[2][4:0];
+      io_led[0] = combine.out[7:0];
+      io_led[1] = combine.out[15:8];
+    }
+    
+    
+    
+    
+    
+    
+    //FSM for auto testing begins here
+    case(alu.q){
+      alu.IDLE:
+        led = on;
+        
+        if (io_button[3]){
+          alu.d = alu.AUTO;
+        }
+      
+      //Led on the mojo (without shield) will be used to indicate which state we are at for the testing
+      alu.AUTO:
+        led = 8b11111110;   
+        case(state.q) {
+          state.IDLE:
+            counter.d = 0;
+            led=8b11111100;
+          //PASS will be shown on 7 segments display for each state if all tests cases are true
+          //else, for failed cases. ADDF is for ADDER; COPF is for COMPARE; BOOF is for BOOLEAN; SHIF is for SHIFTER; NULF is for MULTIPLIER 
+            state.ADDER:
+            led=8b11111000;
+            test_adder.start = 1;
+            
+            if(test_adder.status == 1) {
+              // PASS
+              seg.values = {4d10, 4d11, 4d5, 4d5}; //PASS 
+            }
+            else if(test_adder.status == 2) {
+              // FAIL
+              seg.values = {4d11, 4d0, 4d0, 4d13}; //ADDF(ail) 
+            }
+          
+          state.COMPARE:
+            test_compare.start = 1;
+            led=8b11110000;
+            if(test_compare.status == 1) {
+              // PASS
+              seg.values = {4d10, 4d11, 4d5, 4d5}; //PASS
+            }
+            else if(test_compare.status == 2) {
+              // FAIL
+              seg.values = {4d14, 4d0, 4d10, 4d13}; //COPF(ail)
+            }
+          
+          state.BOOLE:
+            test_boole.start = 1;
+            led=8b11100000;
+            if(test_boole.status == 1) {
+              // PASS
+              seg.values = {4d10, 4d11, 4d5, 4d5}; //PASS
+            }
+            else if(test_boole.status == 2) {
+              // FAIL
+              seg.values = {4d8, 4d0, 4d0, 4d13}; //BOOF(ail)
+            }
+          
+          state.SHIFTER:
+            test_shifter.start = 1;
+            led=8b11000000;
+            if(test_shifter.status == 1) {
+              // PASS
+              seg.values = {4d10, 4d11, 4d5, 4d5}; //PASS
+            }
+            else if(test_shifter.status == 2) {
+              // FAIL
+              seg.values = {4d5, 4d12, 4d1, 4d13}; //SHIF(ail)
+            }
+          
+          state.MULTIPLY:
+            test_multiply.start = 1;
+            led=8b10000000;
+            if(test_multiply.status == 1) {
+              // PASS
+              seg.values = {4d10, 4d11, 4d5, 4d5}; //PASS
+            }
+            else if(test_multiply.status == 2) {
+              // FAIL
+              seg.values = {4d2, 4d3, 4d4, 4d13}; //NULF(ail)
+            }
+          state.ERROR:
+            test_error.start = 1;
+            led=8b10101010;
+            if(test_error.status == 1) {
+              // PASS
+              seg.values = {4d10, 4d11, 4d5, 4d5}; //PASS
+            }
+            else if(test_error.status == 2) {
+              // FAIL
+              seg.values = {4d11, 4d0, 4d0, 4d13}; //ADDF(ail)
+            }
+        }
+        
+        // automated testing triggered on pressing buttons on IO shield
+        // [0]up - adder (ADD, SUB)
+        // [1]center - compare
+        // [2]down - boolean
+        // [3]left - shifter
+        // [4]right - multiply
+        
+        if(io_button[0]) { //up
+          counter.d = 0;
+          state.d = state.ADDER;
+          // on switching the io_dip[2][7] on, the state changes to test_error
+          // fail case is induced - adder will fail
+          if (io_dip[2][7]==1 &&io_dip[2][6]==1) {
+            counter.d = 0;
+            state.d = state.ERROR;
+          }
+        }
+        if(io_button[1]) { //center
+          counter.d = 0;
+          state.d = state.COMPARE;
+        }
+        if(io_button[2]) { //down
+          counter.d = 0;
+          state.d = state.BOOLE;
+        }
+        if(io_button[3]) { //left
+          counter.d = 0;
+          state.d = state.SHIFTER;
+        }
+        if(io_button[4]) { //right
+          counter.d = 0;
+          state.d = state.MULTIPLY;
+        }
+        
+        counter.d = counter.q + 1;
+        
+        
+        // Set output to ALU
+        io_led[0] = combine.out[7:0];
+        io_led[1] = combine.out[15:8];
+    }
+  }
+}

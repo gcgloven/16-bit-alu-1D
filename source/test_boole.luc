@@ -1,0 +1,95 @@
+module test_boole (
+    input clk,  // clock
+    input rst,  // reset
+    input start,
+    output status[2] // 0 = not done; 1 = pass; 2 = fail
+    
+  ) {
+  
+  dff test_counter[4](.clk(clk), .rst(rst));
+  
+  fsm state (.clk(clk), .rst(rst)) = {IDLE, TEST, PASS, FAIL};
+  boole16 boole16;
+    
+  always {  
+    status = 0;
+    boole16.a = 0;
+    boole16.b = 0;
+    boole16.alufn = 5b10000;
+    
+    if(start == 0){ 
+      state.d = state.IDLE;
+    }
+    // test cases are tested in this segment
+    // status is used to indicate the test result
+    case(state.q) {
+      state.IDLE:
+        status = 0;
+        if(start == 1) {
+          state.d = state.TEST;
+        }
+      state.TEST:
+        case(test_counter.q) {
+        // h1234 is 0001 0010 0011 0100
+        // h4321 is 0100 0011 0010 0001
+        // The two test case covers all possible logic gate inputs (0-0, 0-1, 1-0, 1-1)
+          4b0000: //1234 AND 4321
+            boole16.alufn = Func.AND;
+            boole16.a = 16h1234;
+            boole16.b = 16h4321;
+            
+            if (boole16.out != 16b0000001000100000) {
+            state.d = state.FAIL;
+            }
+          4b0001: //1234 OR 4321
+            boole16.alufn = Func.OR;
+            boole16.a = 16h1234;
+            boole16.b = 16h4321;
+            
+            if (boole16.out != 16b0101001100110101) {
+            state.d = state.FAIL;
+            }
+          4b0010: // 1234 XOR 4321
+            boole16.alufn = Func.XOR;
+            boole16.a = 16h1234;
+            boole16.b = 16h4321;
+            
+            if (boole16.out != 16b0101000100010101) {
+            state.d = state.FAIL;
+            }
+          4b0011: // 1234 NAND 4321
+            boole16.alufn = Func.NAND;
+            boole16.a = 16h1234;
+            boole16.b = 16h4321;
+            
+            if (boole16.out != 16b1111110111011111) {
+            state.d = state.FAIL;
+            }
+          4b0100: // 1234 NOR 4321
+            boole16.alufn = Func.NOR;
+            boole16.a = 16h1234;
+            boole16.b = 16h4321;
+            
+            if (boole16.out != 16b1010110011001010) {
+            state.d = state.FAIL;
+            }
+          4b0101: // LDR 1234
+            boole16.alufn = Func.LDR;
+            boole16.a = 16h1234;
+            boole16.b = 16h4321;
+            
+            if (boole16.out != 16h1234) {
+            state.d = state.FAIL;
+            }
+          4b0111:
+             state.d = state.PASS;            
+        }
+      state.PASS:
+        status = 1;
+      state.FAIL:
+        status = 2;
+    }
+    
+    test_counter.d = test_counter.q + 1;
+  }
+}

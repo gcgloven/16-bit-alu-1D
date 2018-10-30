@@ -1,0 +1,114 @@
+module test_compare (
+    input clk,  // clock
+    input rst,  // reset
+    input start,
+    output status[2] // 0 = not done; 1 = pass; 2 = fail
+  ) {
+  
+  dff counter[4](.clk(clk), .rst(rst));
+  fsm state (.clk(clk), .rst(rst)) = {IDLE, TEST, PASS, FAIL};
+  compare16 compare16;
+  always {
+    status=0;
+    compare16.a = 0;
+    compare16.b = 0;
+    compare16.alufn = 6d0;
+    
+    if(start == 0){
+      state.d = state.IDLE;
+    }
+    // test cases are tested in this segment
+    // status is used to indicate the test result
+    case(state.q) {
+      state.IDLE:
+        status = 0;
+        if(start == 1) {
+          state.d = state.TEST;
+        }
+      state.TEST:
+        case(counter.q) {
+          4h0: // Test if FFFF = FFFF
+            compare16.alufn = Func.CMPEQ;
+            compare16.a = 16hFFFF;
+            compare16.b = 16hFFFF;
+            
+            if(compare16.out != 1) {
+              state.d = state.FAIL;
+            }
+          4h1: // Test if Big == Small
+            compare16.alufn = Func.CMPEQ;
+            compare16.a = 16hFFFF;
+            compare16.b = 16hFFF0;
+            
+            if(compare16.out != 0) {
+              state.d = state.FAIL;
+            }
+          4h2: // Test if Small = big
+            compare16.alufn = Func.CMPEQ;
+            compare16.a = 16hFFF0;
+            compare16.b = 16hFFFF;
+            
+            if(compare16.out != 0) {
+              state.d = state.FAIL;
+            }
+          4h3: // Test if Small < Big
+            compare16.alufn = Func.CMPLT;
+            compare16.a = 16h0000;
+            compare16.b = 16hFFFF;
+            
+            if(compare16.out != 1) {
+              state.d = state.FAIL;
+            }
+          4h4: // Test if Big < Small
+            compare16.alufn = Func.CMPLT;
+            compare16.a = 16hFFFF;
+            compare16.b = 16h0000;
+            
+            if(compare16.out != 0) {
+              state.d = state.FAIL;
+            }
+          4h5: // Test if FFFF < FFFF
+            compare16.alufn = Func.CMPLT;
+            compare16.a = 16hFFFF;
+            compare16.b = 16hFFFF;
+            
+            if(compare16.out != 0) {
+              state.d = state.FAIL;
+            }
+          4h6: // Test if 0000 <= 0000
+            compare16.alufn = Func.CMPLE;
+            compare16.a = 16h0000;
+            compare16.b = 16h0000;
+            
+            if(compare16.out != 1) {
+              state.d = state.FAIL;
+            }
+          4h7: //Test if 0000 <= FFFF
+            compare16.alufn = Func.CMPLE;
+            compare16.a = 16h0000;
+            compare16.b = 16hFFFF;
+            
+            if(compare16.out != 1) {
+              state.d = state.FAIL;
+            }
+          4h8: // Test if Big <= Small
+            compare16.alufn = Func.CMPLE;
+            compare16.a = 16hFFFF;
+            compare16.b = 16h0000;
+            
+            if(compare16.out != 0) {
+              state.d = state.FAIL;
+            }
+          
+          4h9:
+            state.d = state.PASS;
+        }
+      state.PASS:
+        status = 1;
+      state.FAIL:
+        status = 2;
+    }
+    
+    counter.d = counter.q + 1;
+  }
+}

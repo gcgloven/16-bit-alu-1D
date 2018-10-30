@@ -1,0 +1,157 @@
+module test_adder (
+    input clk,  // clock
+    input rst,  // reset
+    input start,
+    output status[2] // 0 = not done; 1 = pass; 2 = fail
+    
+  ) {
+  
+  dff counter[4](.clk(clk), .rst(rst));
+  
+  fsm state (.clk(clk), .rst(rst)) = {IDLE, TEST, PASS, FAIL};
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+
+ 
+  adder16 adder16;
+    
+   always {  
+    status = 0;
+    adder16.a = 0;
+    adder16.b = 0;
+    adder16.alufn = 5b10000;
+    
+    if(start == 0){ 
+      state.d = state.IDLE;
+    }
+    // test cases are tested in this segment
+    // status is used to indicate the test result
+    case(state.q) {
+      state.IDLE:
+        status = 0;
+        if(start == 1) {
+          state.d = state.TEST;
+        }
+      state.TEST:
+        case(counter.q) {
+          4h0:
+          //Zero + Zero, No Overflow
+            adder16.alufn = Func.ADD;
+            adder16.a = 16h0000;
+            adder16.b = 16h0000;
+            
+            if(adder16.out != 16h0000) {
+              state.d = state.FAIL;
+            }             
+          4h1:
+          //Positive + Positive, No Overflow
+            adder16.alufn = Func.ADD;
+            adder16.a = 16h0001;
+            adder16.b = 16h0001;
+            
+            if(adder16.out != 16h0002) {
+              state.d = state.FAIL;
+            }             
+          4h2:
+          //Positive + Positive, Just Overflow
+            adder16.alufn = Func.ADD;
+            adder16.a = 16h8000;
+            adder16.b = 16h8000;
+            
+            if(adder16.out != 16h0000) {
+              state.d = state.FAIL;
+            }
+          4h3:
+          //Positive + Negative, Overflow
+            adder16.alufn = Func.ADD;
+            adder16.a = 16h0001;
+            adder16.b = 16hFFFF;
+            
+            if(adder16.out != 16h0000) {
+              state.d = state.FAIL;
+            }
+          4h4:
+          //Positive + Negative (Never overflow)
+            adder16.alufn = Func.ADD;            
+            adder16.a = 16hF001;
+            adder16.b = 16h0001;
+            
+            if(adder16.out != 16hF002) {
+              state.d = state.FAIL;
+            }            
+          4h5:
+          //Zero - Zero
+            adder16.alufn = Func.SUB;            
+            adder16.a = 16h0000;
+            adder16.b = 16h0000;
+            
+            if(adder16.out != 16h0000) {
+              state.d = state.FAIL;
+            }
+          4h6:
+          //Negative - Negative, Never Overflow
+            adder16.alufn = Func.SUB;
+            adder16.a = 16hFFFF;
+            adder16.b = 16hFFFF;
+            
+            if(adder16.out != 16h0000) {
+              state.d = state.FAIL;
+            }             
+          4h7:
+          //Positive - Positive, Never Overflow
+            adder16.alufn = Func.SUB;
+            adder16.a = 16h0001;
+            adder16.b = 16h0001;
+            
+            if(adder16.out != 16h0000) {
+              state.d = state.FAIL;
+            }             
+          4h8:
+          //Negative - Positive, Overflow
+            adder16.alufn = Func.SUB;
+            adder16.a = 16h8000;
+            adder16.b = 16h0001;
+            
+            if(adder16.out != 16h7FFF) {
+              state.d = state.FAIL;
+            }
+          4h9:
+          //Positive - Negative, Overflow
+            adder16.alufn = Func.SUB;
+            adder16.a = 16h7FFF;
+            adder16.b = 16h8001;
+            
+            if(adder16.out != 16hFFFE) {
+              state.d = state.FAIL;
+            }
+          4hA:
+          //Negative - Positive, No Overflow
+            adder16.alufn = Func.SUB;
+            adder16.a = 16hFFFF;
+            adder16.b = 16h0001;
+            
+            if(adder16.out != 16hFFFE) {
+              state.d = state.FAIL;
+            }
+          4hB:
+          //Positive - Negative, No Overflow
+            adder16.alufn = Func.SUB;
+            adder16.a = 16h0001;
+            adder16.b = 16hFFFF;
+            
+            if(adder16.out != 8h0002) {
+              state.d = state.FAIL;
+            }                         
+          
+          4hC:
+             state.d = state.PASS;            
+        }
+      state.PASS:
+        status = 1;
+      state.FAIL:
+        status = 2;
+    }
+    
+    counter.d = counter.q + 1;
+  }
+}

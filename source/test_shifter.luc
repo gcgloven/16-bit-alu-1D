@@ -1,0 +1,115 @@
+module test_shifter (
+    input clk,  // clock
+    input rst,  // reset
+    input start,
+    output status[2] // 0 = not done; 1 = pass; 2 = fail
+  ) {
+  
+  dff counter[4](.clk(clk), .rst(rst));
+  fsm state (.clk(clk), .rst(rst)) = {IDLE, TEST, PASS, FAIL};
+  shift16 shifter;
+  
+  always {
+    status = 0;
+    shifter.a = 0;
+    shifter.b = 0;
+    shifter.alufn = 6d0;
+    
+    if(start == 0){
+      state.d = state.IDLE;
+    }
+    
+    case(state.q) {
+      state.IDLE:
+        status = 0;
+        if(start == 1) {
+          state.d = state.TEST;
+        }
+      state.TEST:
+        case(counter.q) {
+          4b0000: //Shift FFFF SHL 15 
+            shifter.alufn = Func.SHL;
+            shifter.a = 16hFFFF;
+            shifter.b = 16h000F;
+            
+            if(shifter.out != 16h8000) {
+              state.d = state.FAIL;
+            }
+          4b0001: //Shift 0000 SHL 7
+            shifter.alufn = Func.SHL;
+            shifter.a = 16h0000;
+            shifter.b = 16h000F;
+            
+            if(shifter.out != 16h0000) {
+              state.d = state.FAIL;
+            }
+          4b0010: //Shift 1234 SHL 4 
+            shifter.alufn = Func.SHL;
+            shifter.a = 16h1234;
+            shifter.b = 16h0004;
+            
+            if(shifter.out != 16h2340) {
+              state.d = state.FAIL;
+            }
+          
+          4b0011: //Shift FFFF SHR 15
+            shifter.alufn = Func.SHR;
+            shifter.a = 16hFFFF;
+            shifter.b = 16h000F;
+            
+            if(shifter.out != 16h0001) {
+              state.d = state.FAIL;
+            }
+          4b0100: //Shift 0000 SHR 15
+            shifter.alufn = Func.SHR;
+            shifter.a = 16h0000;
+            shifter.b = 16h000F;
+            
+            if(shifter.out != 16h0000) {
+              state.d = state.FAIL;
+            }
+          4b0101: //Shift 1234 SHR 4 
+            shifter.alufn = Func.SHR;
+            shifter.a = 16h1234;
+            shifter.b = 16h0004;
+            
+            if(shifter.out != 16h0123) {
+              state.d = state.FAIL;
+            }
+          4b0110: //Shift FFFF SRA 15
+            shifter.alufn = Func.SRA;
+            shifter.a = 16hFFFF;
+            shifter.b = 16h000F;
+            
+            if(shifter.out != 16hFFFF) {
+              state.d = state.FAIL;
+            }
+          4b0111: //Shift 0000 SRA 15
+            shifter.alufn = Func.SRA;
+            shifter.a = 16h0000;
+            shifter.b = 16h000F;
+            
+            if(shifter.out != 16h0000) {
+              state.d = state.FAIL;
+            }
+          4b1000: //Shift 1234 SRA 4
+            shifter.alufn = Func.SRA;
+            shifter.a = 16h1234;
+            shifter.b = 16h0004;
+            
+            if(shifter.out != 16h0123) {
+              state.d = state.FAIL;
+            }
+          
+          4b1111:
+            state.d = state.PASS;
+        }
+      state.PASS:
+        status = 1;
+      state.FAIL:
+        status = 2;
+    }
+    
+    counter.d = counter.q + 1;
+  }
+}

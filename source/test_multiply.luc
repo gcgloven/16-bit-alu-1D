@@ -1,0 +1,108 @@
+module test_multiply (
+    input clk,  // clock
+    input rst,  // reset
+    input start,
+    output status[2] // 0 = not done; 1 = pass; 2 = fail
+  ) {
+  dff counter[5](.clk(clk), .rst(rst));
+  fsm state (.clk(clk), .rst(rst)) = {IDLE, TEST, PASS, FAIL};
+  multiply16 mul;
+    
+  always {  
+    status = 0;
+    mul.a = 0;
+    mul.b = 0;
+    mul.alufn = 6d0;
+    
+    if(start == 0){ 
+      state.d = state.IDLE;
+    }
+    // test cases are tested in this segment
+    // status is used to indicate the test result
+    case(state.q) {
+      state.IDLE:
+        status = 0;
+        if(start == 1) {
+          state.d = state.TEST;
+        }
+      
+      state.TEST:
+        case(counter.q) {
+          4b0000: //Zero * Zero
+            mul.alufn = Func.MUL;
+            mul.a = 16h0000;
+            mul.b = 16h0000;
+            
+            if (mul.out != 16h0000) {
+            state.d = state.FAIL;
+            }
+          4b0001: //1 * 1
+            mul.alufn = Func.MUL;
+            mul.a = 16h0001;
+            mul.b = 16h0001;
+            
+            if (mul.out != 16h0001) {
+            state.d = state.FAIL;
+            }
+          4b0010: //-1 * -1
+            mul.alufn = Func.MUL;
+            mul.a = 16hFFFF;
+            mul.b = 16hFFFF;
+            
+            if (mul.out != 16h0001) {
+            state.d = state.FAIL;
+            }
+          4b0011: // 1 * h1234
+            mul.alufn = Func.MUL;
+            mul.a = 16h0001;
+            mul.b = 16h1234;
+          
+            if (mul.out != 16h1234) {
+            state.d = state.FAIL;
+            }
+          4b0100: // Positive * Positive, overflow
+            mul.alufn = Func.MUL;
+            mul.a = 16h1234;
+            mul.b = 16h4321;
+            
+            if (mul.out != 16hF4B4) {            
+            state.d = state.FAIL;
+            }
+          4b0101: // Positive * Positive, no overflow
+            mul.alufn = Func.MUL;
+            mul.a = 16h1234;
+            mul.b = 16h0003;
+            
+            if (mul.out != 16h369C) {
+            state.d = state.FAIL;
+            }   
+          4b0110: // Negative * Negative, overflow
+            mul.alufn = Func.MUL;
+            mul.a = 16hFFF0;
+            mul.b = 16hF001;
+            
+            if (mul.out != 16hFFF0) {
+            state.d = state.FAIL;
+            }
+         
+          4b1000: // Positive * Negative, no overflow
+            mul.alufn = Func.MUL;
+            mul.a = 16h0002;
+            mul.b = 16hFCCC;
+            
+            if (mul.out != 16hF998) {
+            state.d = state.FAIL;
+            }
+              
+          4b1001:
+             state.d = state.PASS;            
+        }
+      state.PASS:
+        status = 1;
+      state.FAIL:
+        status = 2;
+    }
+    
+    counter.d = counter.q + 1;
+  }
+}
